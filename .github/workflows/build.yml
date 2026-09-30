@@ -1,0 +1,48 @@
+name: build worker images
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  packages: write
+env:
+  REG: ghcr.io/raja-projects/wan-worker
+jobs:
+  deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free disk
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost && docker system prune -af && df -h / /mnt
+      - uses: docker/login-action@v3
+        with: { registry: ghcr.io, username: "${{ github.actor }}", password: "${{ secrets.GITHUB_TOKEN }}" }
+      - uses: docker/build-push-action@v6
+        with: { context: ., push: true, tags: "${{ env.REG }}:deps", labels: "org.opencontainers.image.source=https://github.com/${{ github.repository }}" }
+  models:
+    needs: deps
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tag: video4090
+            files: "jayn7/WAN2.2-I2V_A14B-DISTILL-LIGHTX2V-4STEP-GGUF|high_noise_260412/wan2.2_i2v_A14b_high_noise_lightx2v_4step_720p_260412-Q8_0.gguf jayn7/WAN2.2-I2V_A14B-DISTILL-LIGHTX2V-4STEP-GGUF|low_noise_260412/wan2.2_i2v_A14b_low_noise_lightx2v_4step_720p_260412-Q8_0.gguf"
+          - tag: image4090
+            files: "unsloth/Qwen-Image-2512-GGUF|qwen-image-2512-Q6_K.gguf"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free disk
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache /usr/local/share/boost && docker system prune -af && sudo chmod 777 /mnt && df -h / /mnt
+      - uses: imjasonh/setup-crane@v0.4
+      - name: Bake models as layers
+        env: { HF_HUB_ENABLE_HF_TRANSFER: "1" }
+        run: |
+          pip install -q "huggingface_hub[hf_transfer]"
+          echo "${{ secrets.GITHUB_TOKEN }}" | crane auth login ghcr.io -u "${{ github.actor }}" --password-stdin
+          crane copy $REG:deps $REG:${{ matrix.tag }}
+          for f in ${{ matrix.files }}; do
+            python bake.py "${f%%|*}" "${f#*|}" /mnt/layer.tar
+            df -h /mnt
+            crane append -b $REG:${{ matrix.tag }} -f /mnt/layer.tar -t $REG:${{ matrix.tag }}
+            rm -f /mnt/layer.tar
+          done
+          crane manifest $REG:${{ matrix.tag }} | head -c 2000

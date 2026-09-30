@@ -1,0 +1,17 @@
+runpod>=1.7.0
+diffusers==0.40.0
+transformers>=4.49.0
+accelerate>=1.1.1
+peft>=0.15.0
+safetensors
+sentencepiece
+ftfy
+imageio>=2.34
+imageio-ffmpeg
+huggingface_hub[hf_transfer]
+requests
+pillow
+numpy
+opencv-python-headless
+gguf>=0.10.0
+ccvfi==0.0.3
