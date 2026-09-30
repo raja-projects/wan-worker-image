@@ -34,12 +34,12 @@ jobs:
         run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache /usr/local/share/boost && docker system prune -af && sudo chmod 777 /mnt && df -h / /mnt
       - uses: imjasonh/setup-crane@v0.4
       - name: Bake models as layers
-        env: { HF_HUB_ENABLE_HF_TRANSFER: "1" }
+        env: { HF_HUB_ENABLE_HF_TRANSFER: "1", FILES: "${{ matrix.files }}" }
         run: |
           pip install -q "huggingface_hub[hf_transfer]"
           echo "${{ secrets.GITHUB_TOKEN }}" | crane auth login ghcr.io -u "${{ github.actor }}" --password-stdin
           crane copy $REG:deps $REG:${{ matrix.tag }}
-          for f in ${{ matrix.files }}; do
+          for f in $FILES; do
             python bake.py "${f%%|*}" "${f#*|}" /mnt/layer.tar
             df -h /mnt
             crane append -b $REG:${{ matrix.tag }} -f /mnt/layer.tar -t $REG:${{ matrix.tag }}
